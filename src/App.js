@@ -225,7 +225,7 @@ function FormSesion({ pacientes, onSave, onClose }) {
     <Field label="Notas"><textarea value={f.notas} onChange={set("notas")} placeholder="Evolución, observaciones..." rows={4} style={{ resize: "vertical" }} /></Field>
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.greenSoft, borderRadius: 10, border: `1px solid rgba(5,150,105,0.2)`, marginBottom: 20 }}>
       <input type="checkbox" id="real" checked={f.realizada} onChange={e => setF(p => ({ ...p, realizada: e.target.checked }))} style={{ width: 16, height: 16, accentColor: C.green }} />
-      <label htmlFor="real" style={{ textTransform: "none", fontSize: 13.5, color: C.green, margin: 0, fontWeight: 600 }}>✓ Sesión realizada</label>
+      <label htmlFor="real" style={{ textTransform: "none", fontSize: 13.5, color: C.green, margin: 0, fontWeight: 600 }}>✓ Marcar como realizada</label>
     </div>
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
       <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
@@ -554,7 +554,7 @@ function KinFichas({ kin, pacientes, sesiones, ejercicios, kinesiologos, onAgreg
               {misSesiones.map(s => <div key={s.id} className="card" style={{ padding: "14px 18px", display: "flex", gap: 14 }}>
                 <div style={{ fontWeight: 700, color: col, fontSize: 13, minWidth: 88 }}>{fmtDate(s.fecha)}</div>
                 <div style={{ flex: 1, fontSize: 13, color: C.textSoft }}>{s.notas || <span style={{ color: C.textMuted, fontStyle: "italic" }}>Sin notas</span>}</div>
-                <Badge label={s.realizada ? "Realizada" : "Ausente"} type={s.realizada ? "activo" : "cancelado"} />
+                <Badge label={s.realizada ? "Realizada" : "Pendiente"} type={s.realizada ? "activo" : "pendiente"} />
               </div>)}
             </div>}
         </div>}
