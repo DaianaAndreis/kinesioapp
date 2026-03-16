@@ -13,7 +13,6 @@ const C = {
   text: "#0f172a", textSoft: "#475569", textMuted: "#94a3b8",
   sidebar: "#1e293b", sidebarText: "#cbd5e1",
   shadow: "0 1px 3px rgba(0,0,0,0.08)",
-  shadowMd: "0 4px 6px rgba(0,0,0,0.07)",
 };
 
 const CSS = `
@@ -107,6 +106,16 @@ function Modal({ title, onClose, children, width = 540 }) {
       {children}
     </div>
   </div>;
+}
+
+function ModalConfirm({ msg, onConfirm, onClose }) {
+  return <Modal title="Confirmar" onClose={onClose} width={380}>
+    <p style={{ color: C.textSoft, marginBottom: 24, lineHeight: 1.6 }}>{msg}</p>
+    <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+      <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+      <button className="btn btn-danger" onClick={() => { onConfirm(); onClose(); }}>Eliminar</button>
+    </div>
+  </Modal>;
 }
 
 function Empty({ msg, icon = "📭" }) {
@@ -245,15 +254,15 @@ function FormEjercicio({ onSave, onClose, initial = null }) {
 // ── SECRETARIA ─────────────────────────────────────────────────────────────
 function SecDashboard({ pacientes, kinesiologos, sesiones, turnos }) {
   const hoy = today();
-  const turnosHoy = turnos.filter(t => t.fecha === hoy);
-  const sesHoy = sesiones.filter(s => s.fecha === hoy);
+  const sesHoy = sesiones.filter(s => s.fecha === hoy).length;
+  const turnosFuturos = turnos.filter(t => t.fecha >= hoy).length;
   return <div className="fade">
     <PageHeader title="Dashboard" subtitle={`Hoy ${fmtDate(hoy)} · Centro de Kinesiología`} />
     <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 28 }}>
       {[
         { label: "Pacientes activos", val: pacientes.filter(p => p.estado === "activo").length, color: C.accent, icon: "👥" },
-        { label: "Turnos hoy", val: turnosHoy.length, color: C.green, icon: "📅" },
-        { label: "Sesiones hoy", val: sesHoy.length, color: C.purple, icon: "⚡" },
+        { label: "Sesiones hoy", val: sesHoy, color: C.green, icon: "⚡" },
+        { label: "Turnos agendados", val: turnosFuturos, color: C.purple, icon: "📅" },
         { label: "Kinesiólogos", val: kinesiologos.length, color: C.amber, icon: "🩺" },
       ].map(s => <div key={s.label} className="card" style={{ padding: "20px 22px" }}>
         <div style={{ fontSize: 24, marginBottom: 10 }}>{s.icon}</div>
@@ -264,9 +273,9 @@ function SecDashboard({ pacientes, kinesiologos, sesiones, turnos }) {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }} className="form-grid">
       <div>
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14 }}>Turnos de hoy</div>
-        {turnosHoy.length === 0 ? <Empty msg="Sin turnos para hoy" icon="📅" /> :
+        {turnos.filter(t => t.fecha === hoy).length === 0 ? <Empty msg="Sin turnos para hoy" icon="📅" /> :
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {turnosHoy.slice(0, 6).sort((a,b) => a.hora.localeCompare(b.hora)).map(t => {
+            {turnos.filter(t => t.fecha === hoy).sort((a, b) => a.hora.localeCompare(b.hora)).slice(0, 6).map(t => {
               const pac = pacientes.find(p => p.id === t.paciente_id);
               const kin = kinesiologos.find(k => k.id === t.kin_id);
               return <div key={t.id} className="card" style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -285,7 +294,7 @@ function SecDashboard({ pacientes, kinesiologos, sesiones, turnos }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {kinesiologos.map(k => {
             const kPac = pacientes.filter(p => p.kin_id === k.id && p.estado === "activo");
-            const kT = turnosHoy.filter(t => t.kin_id === k.id);
+            const kSesHoy = sesiones.filter(s => s.fecha === hoy && kPac.find(p => p.id === s.paciente_id));
             const col = kinColor(k.id);
             return <div key={k.id} className="card" style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 12 }}>
               <Avatar nombre={k.nombre} size={40} color={col} />
@@ -295,7 +304,7 @@ function SecDashboard({ pacientes, kinesiologos, sesiones, turnos }) {
               </div>
               <div style={{ display: "flex", gap: 16, textAlign: "center" }}>
                 <div><div style={{ fontWeight: 800, fontSize: 18, color: C.accent }}>{kPac.length}</div><div style={{ fontSize: 10, color: C.textMuted }}>pacientes</div></div>
-                <div><div style={{ fontWeight: 800, fontSize: 18, color: C.green }}>{kT.length}</div><div style={{ fontSize: 10, color: C.textMuted }}>turnos hoy</div></div>
+                <div><div style={{ fontWeight: 800, fontSize: 18, color: C.green }}>{kSesHoy.length}</div><div style={{ fontSize: 10, color: C.textMuted }}>ses. hoy</div></div>
               </div>
             </div>;
           })}
@@ -360,12 +369,14 @@ function SecPacientes({ pacientes, kinesiologos, onAgregar, onEditar, onCambiarE
   </div>;
 }
 
-function SecKinesiologos({ kinesiologos, pacientes, sesiones, onAgregar, onEditar }) {
+function SecKinesiologos({ kinesiologos, pacientes, sesiones, onAgregar, onEditar, onEliminar }) {
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [confirmando, setConfirmando] = useState(null);
   return <div className="fade">
     <PageHeader title="Kinesiólogos" subtitle={`${kinesiologos.length} profesionales`} action={<button className="btn btn-primary" onClick={() => setModal(true)}>+ Nuevo kinesiólogo</button>} />
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {kinesiologos.length === 0 && <Empty msg="Sin kinesiólogos registrados" icon="🩺" />}
       {kinesiologos.map(k => {
         const kPac = pacientes.filter(p => p.kin_id === k.id && p.estado === "activo");
         const kSes = sesiones.filter(s => kPac.find(p => p.id === s.paciente_id));
@@ -380,18 +391,23 @@ function SecKinesiologos({ kinesiologos, pacientes, sesiones, onAgregar, onEdita
             <div><div style={{ fontWeight: 800, fontSize: 24, color: C.accent }}>{kPac.length}</div><div style={{ fontSize: 11, color: C.textMuted }}>pacientes</div></div>
             <div><div style={{ fontWeight: 800, fontSize: 24, color: C.green }}>{kSes.length}</div><div style={{ fontSize: 11, color: C.textMuted }}>sesiones</div></div>
           </div>
-          <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => setEditando(k)}>✏️ Editar</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => setEditando(k)}>✏️ Editar</button>
+            <button className="btn btn-danger" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => setConfirmando(k)}>🗑 Eliminar</button>
+          </div>
         </div>;
       })}
     </div>
     {modal && <Modal title="Nuevo kinesiólogo" onClose={() => setModal(false)} width={460}><FormKinesiologo onSave={f => { onAgregar(f); setModal(false); }} onClose={() => setModal(false)} /></Modal>}
     {editando && <Modal title="Editar kinesiólogo" onClose={() => setEditando(null)} width={460}><FormKinesiologo onSave={f => { onEditar(editando.id, f); setEditando(null); }} onClose={() => setEditando(null)} initial={editando} /></Modal>}
+    {confirmando && <ModalConfirm msg={`¿Eliminar a ${confirmando.nombre}? Esta acción no se puede deshacer.`} onConfirm={() => onEliminar(confirmando.id)} onClose={() => setConfirmando(null)} />}
   </div>;
 }
 
 function SecTurnos({ turnos, pacientes, kinesiologos, onAgregar, onEditar, onEliminar }) {
   const [modal, setModal] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [confirmando, setConfirmando] = useState(null);
   const [fecha, setFecha] = useState(today());
   const [filtroKin, setFiltroKin] = useState("todos");
   const filtrados = turnos.filter(t => t.fecha === fecha && (filtroKin === "todos" || t.kin_id == filtroKin)).sort((a, b) => a.hora.localeCompare(b.hora));
@@ -420,13 +436,14 @@ function SecTurnos({ turnos, pacientes, kinesiologos, onAgregar, onEditar, onEli
             <Badge label={t.estado} type={t.estado} />
             <div style={{ display: "flex", gap: 6 }}>
               <button className="btn btn-ghost" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => setEditando(t)}>✏️</button>
-              <button className="btn btn-danger" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => onEliminar(t.id)}>🗑</button>
+              <button className="btn btn-danger" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => setConfirmando(t)}>🗑</button>
             </div>
           </div>;
         })}
       </div>}
     {modal && <Modal title="Nuevo turno" onClose={() => setModal(false)}><FormTurno pacientes={pacientes} kinesiologos={kinesiologos} onSave={f => { onAgregar(f); setModal(false); }} onClose={() => setModal(false)} /></Modal>}
     {editando && <Modal title="Editar turno" onClose={() => setEditando(null)}><FormTurno pacientes={pacientes} kinesiologos={kinesiologos} onSave={f => { onEditar(editando.id, f); setEditando(null); }} onClose={() => setEditando(null)} initial={editando} /></Modal>}
+    {confirmando && <ModalConfirm msg="¿Eliminar este turno?" onConfirm={() => onEliminar(confirmando.id)} onClose={() => setConfirmando(null)} />}
   </div>;
 }
 
@@ -437,13 +454,14 @@ function KinHoy({ kin, pacientes, sesiones, turnos, onNuevaSesion }) {
   const misPacientes = pacientes.filter(p => p.kin_id === kin.id && p.estado === "activo");
   const misTurnos = turnos.filter(t => t.kin_id === kin.id && t.fecha === hoy).sort((a, b) => a.hora.localeCompare(b.hora));
   const misSesHoy = sesiones.filter(s => s.fecha === hoy && misPacientes.find(p => p.id === s.paciente_id));
+  const turnosFuturos = turnos.filter(t => t.kin_id === kin.id && t.fecha >= hoy).length;
   return <div className="fade">
     <PageHeader title={`Hola, ${kin.nombre.split(" ").slice(-1)[0]} 👋`} subtitle={kin.especialidad} action={<button className="btn btn-primary" onClick={onNuevaSesion}>+ Registrar sesión</button>} />
     <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 28 }}>
       {[
         { label: "Mis pacientes", val: misPacientes.length, color: col, icon: "👥" },
-        { label: "Turnos hoy", val: misTurnos.length, color: C.green, icon: "📅" },
-        { label: "Sesiones hoy", val: misSesHoy.length, color: C.purple, icon: "⚡" },
+        { label: "Sesiones hoy", val: misSesHoy.length, color: C.green, icon: "⚡" },
+        { label: "Turnos agendados", val: turnosFuturos, color: C.purple, icon: "📅" },
       ].map(s => <div key={s.label} className="card" style={{ padding: "20px 22px" }}>
         <div style={{ fontSize: 22, marginBottom: 8 }}>{s.icon}</div>
         <div style={{ fontSize: 28, fontWeight: 800, color: s.color }}>{s.val}</div>
@@ -626,7 +644,7 @@ function Sidebar({ auth, view, setView, onLogout, isOpen, onClose }) {
     <div id="sidebar" className={isOpen ? "open" : ""} style={{ width: 220, background: C.sidebar, padding: "22px 12px", display: "flex", flexDirection: "column", gap: 4, position: "fixed", top: 0, bottom: 0, zIndex: 200, overflowY: "auto", transition: "left .3s ease" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", marginBottom: 24 }}>
         <div style={{ width: 36, height: 36, background: `linear-gradient(135deg, ${C.accent}, #7c3aed)`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>🦴</div>
-        <div style={{ fontWeight: 800, fontSize: 17, color: "#fff" }}>KinesiApp</div>
+        <div style={{ fontWeight: 800, fontSize: 17, color: "#fff" }}>KinesioApp</div>
       </div>
       {nav.map(item => <button key={item.id} className={`nav-item ${view === item.id ? "active" : ""}`} onClick={() => { setView(item.id); onClose(); }}>
         <span style={{ fontSize: 16 }}>{item.icon}</span>{item.label}
@@ -698,6 +716,10 @@ export default function App() {
     const { data } = await supabase.from("kinesiologos").update({ nombre: f.nombre, especialidad: f.especialidad }).eq("id", id).select().single();
     if (data) setKinesiologos(prev => prev.map(k => k.id === id ? data : k));
   };
+  const eliminarKinesiologo = async id => {
+    await supabase.from("kinesiologos").delete().eq("id", id);
+    setKinesiologos(prev => prev.filter(k => k.id !== id));
+  };
   const agregarSesion = async f => {
     const pid = Number(f.paciente_id);
     const { data } = await supabase.from("sesiones").insert([{ paciente_id: pid, fecha: f.fecha, notas: f.notas, realizada: f.realizada }]).select().single();
@@ -749,13 +771,13 @@ export default function App() {
       <div className="main-wrap" style={{ flex: 1, marginLeft: 220, display: "flex", flexDirection: "column", minHeight: "100vh" }}>
         <div className="mobile-header">
           <button onClick={() => setSidebarOpen(true)} style={{ background: "none", border: "none", color: "#fff", fontSize: 24, cursor: "pointer", lineHeight: 1 }}>☰</button>
-          <div style={{ fontWeight: 800, color: "#fff", fontSize: 16 }}>🦴 KinesiApp</div>
+          <div style={{ fontWeight: 800, color: "#fff", fontSize: 16 }}>🦴 KinesioApp</div>
           <div style={{ width: 40 }} />
         </div>
         <div className="page-pad" style={{ flex: 1, padding: "28px 32px", overflowY: "auto" }}>
           {auth.rol === "secretaria" && view === "home" && <SecDashboard pacientes={pacientes} kinesiologos={kinesiologos} sesiones={sesiones} turnos={turnos} />}
           {auth.rol === "secretaria" && view === "pacientes" && <SecPacientes pacientes={pacientes} kinesiologos={kinesiologos} onAgregar={agregarPaciente} onEditar={editarPaciente} onCambiarEstado={cambiarEstadoPaciente} />}
-          {auth.rol === "secretaria" && view === "kinesiologos" && <SecKinesiologos kinesiologos={kinesiologos} pacientes={pacientes} sesiones={sesiones} onAgregar={agregarKinesiologo} onEditar={editarKinesiologo} />}
+          {auth.rol === "secretaria" && view === "kinesiologos" && <SecKinesiologos kinesiologos={kinesiologos} pacientes={pacientes} sesiones={sesiones} onAgregar={agregarKinesiologo} onEditar={editarKinesiologo} onEliminar={eliminarKinesiologo} />}
           {auth.rol === "secretaria" && view === "turnos" && <SecTurnos turnos={turnos} pacientes={pacientes} kinesiologos={kinesiologos} onAgregar={agregarTurno} onEditar={editarTurno} onEliminar={eliminarTurno} />}
           {auth.rol === "kinesiologo" && kin && view === "home" && <KinHoy kin={kin} pacientes={pacientes} sesiones={sesiones} turnos={turnos} onNuevaSesion={() => setModalSesRapida(true)} />}
           {auth.rol === "kinesiologo" && kin && view === "fichas" && <KinFichas kin={kin} pacientes={pacientes} sesiones={sesiones} ejercicios={ejercicios} kinesiologos={kinesiologos} onAgregarPaciente={agregarPaciente} onEditarPaciente={editarPaciente} onCambiarEstado={cambiarEstadoPaciente} onAgregarSesion={agregarSesion} onAgregarEjercicio={agregarEjercicio} onEditarEjercicio={editarEjercicio} onEliminarEjercicio={eliminarEjercicio} />}
