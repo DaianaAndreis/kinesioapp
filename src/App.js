@@ -586,7 +586,7 @@ function Login({ onLogin }) {
     <div style={{ maxWidth: 400, width: "100%" }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
         <div style={{ width: 72, height: 72, background: `linear-gradient(135deg, ${C.accent}, #7c3aed)`, borderRadius: 22, margin: "0 auto 20px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, boxShadow: "0 8px 32px rgba(37,99,235,0.2)" }}>🦴</div>
-        <h1 style={{ fontSize: 28, fontWeight: 800 }}>KinesiApp</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 800 }}>KinesioApp</h1>
         <p style={{ color: C.textMuted, fontSize: 14, marginTop: 6 }}>Centro de Kinesiología</p>
       </div>
       <div className="card" style={{ padding: 32 }}>
