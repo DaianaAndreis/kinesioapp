@@ -341,6 +341,213 @@ function FormEditSesionSec({ sesion, kinesiologos, pacientes, sesionesRealizadas
   </>;
 }
 
+function SecHistorial({ sesiones, pacientes, kinesiologos }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroPac, setFiltroPac] = useState("todos");
+  const [filtroKin, setFiltroKin] = useState("todos");
+  const [detalle, setDetalle] = useState(null); // paciente o kinesiologo seleccionado
+
+  // Sesiones enriquecidas
+  const sesionesEnriquecidas = sesiones.map(s => ({
+    ...s,
+    paciente: pacientes.find(p => p.id === s.paciente_id),
+    kinesiologo: kinesiologos.find(k => k.id === s.kin_id),
+  }));
+
+  // Filtrado
+  const filtradas = sesionesEnriquecidas.filter(s => {
+    const matchBusqueda = busqueda === "" ||
+      s.paciente?.nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
+      s.kinesiologo?.nombre?.toLowerCase().includes(busqueda.toLowerCase());
+    const matchPac = filtroPac === "todos" || s.paciente_id == filtroPac;
+    const matchKin = filtroKin === "todos" || s.kin_id == filtroKin;
+    return matchBusqueda && matchPac && matchKin;
+  }).sort((a, b) => b.fecha?.localeCompare(a.fecha));
+
+  // Vista detalle por paciente
+  if (detalle?.tipo === "paciente") {
+    const pac = detalle.data;
+    const col = kinColor(pac.kin_id);
+    const sesDelPac = sesionesEnriquecidas.filter(s => s.paciente_id === pac.id).sort((a, b) => b.fecha?.localeCompare(a.fecha));
+    return <div className="fade">
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <button className="btn btn-ghost" style={{ padding: "8px 12px" }} onClick={() => setDetalle(null)}>← Volver</button>
+        <Avatar nombre={pac.nombre} size={44} color={col} />
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>{pac.nombre}</div>
+          <div style={{ fontSize: 13, color: C.textMuted }}>{pac.tratamiento} · {sesDelPac.length} sesiones</div>
+        </div>
+      </div>
+      {sesDelPac.length === 0 ? <Empty msg="Sin sesiones registradas" icon="📋" /> :
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {sesDelPac.map(s => (
+            <div key={s.id} className="card" style={{ padding: "14px 18px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: s.notas ? 10 : 0 }}>
+                <div style={{ fontWeight: 700, color: col, fontSize: 14, minWidth: 92 }}>{fmtDate(s.fecha)}</div>
+                {s.kinesiologo && <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                  <Avatar nombre={s.kinesiologo.nombre} size={28} color={kinColor(s.kin_id)} />
+                  <span style={{ fontSize: 13, color: C.textSoft }}>{s.kinesiologo.nombre}</span>
+                </div>}
+                <Badge label={s.realizada ? "Realizada" : "Pendiente"} type={s.realizada ? "activo" : "pendiente"} />
+              </div>
+              {s.notas && <div style={{ fontSize: 13, color: C.textSoft, background: C.surfaceHigh, padding: "8px 12px", borderRadius: 8 }}>{s.notas}</div>}
+            </div>
+          ))}
+        </div>}
+    </div>;
+  }
+
+  // Vista detalle por kinesiólogo
+  if (detalle?.tipo === "kinesiologo") {
+    const kin = detalle.data;
+    const col = kinColor(kin.id);
+    const sesDelKin = sesionesEnriquecidas.filter(s => s.kin_id === kin.id).sort((a, b) => b.fecha?.localeCompare(a.fecha));
+    return <div className="fade">
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <button className="btn btn-ghost" style={{ padding: "8px 12px" }} onClick={() => setDetalle(null)}>← Volver</button>
+        <Avatar nombre={kin.nombre} size={44} color={col} />
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>{kin.nombre}</div>
+          <div style={{ fontSize: 13, color: C.textMuted }}>{kin.especialidad} · {sesDelKin.length} sesiones</div>
+        </div>
+      </div>
+      {sesDelKin.length === 0 ? <Empty msg="Sin sesiones registradas" icon="📋" /> :
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {sesDelKin.map(s => (
+            <div key={s.id} className="card" style={{ padding: "14px 18px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: s.notas ? 10 : 0 }}>
+                <div style={{ fontWeight: 700, color: col, fontSize: 14, minWidth: 92 }}>{fmtDate(s.fecha)}</div>
+                {s.paciente && <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                  <Avatar nombre={s.paciente.nombre} size={28} color={kinColor(s.paciente.kin_id)} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{s.paciente.nombre}</div>
+                    <div style={{ fontSize: 11, color: C.textMuted }}>{s.paciente.tratamiento}</div>
+                  </div>
+                </div>}
+                <Badge label={s.realizada ? "Realizada" : "Pendiente"} type={s.realizada ? "activo" : "pendiente"} />
+              </div>
+              {s.notas && <div style={{ fontSize: 13, color: C.textSoft, background: C.surfaceHigh, padding: "8px 12px", borderRadius: 8 }}>{s.notas}</div>}
+            </div>
+          ))}
+        </div>}
+    </div>;
+  }
+
+  // Vista principal — tabla general con búsqueda
+  return <div className="fade">
+    <PageHeader title="Historial de sesiones" subtitle={`${sesiones.length} sesiones registradas`} />
+
+    {/* Filtros */}
+    <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+      <input
+        value={busqueda}
+        onChange={e => setBusqueda(e.target.value)}
+        placeholder="🔍  Buscar por paciente o kinesiólogo..."
+        style={{ flex: 1, minWidth: 200 }}
+      />
+      <select value={filtroPac} onChange={e => setFiltroPac(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+        <option value="todos">Todos los pacientes</option>
+        {pacientes.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+      </select>
+      <select value={filtroKin} onChange={e => setFiltroKin(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+        <option value="todos">Todos los kinesiólogos</option>
+        {kinesiologos.map(k => <option key={k.id} value={k.id}>{k.nombre}</option>)}
+      </select>
+    </div>
+
+    {filtradas.length === 0 ? <Empty msg="Sin sesiones para los filtros seleccionados" icon="📋" /> : <>
+
+      {/* Desktop tabla */}
+      <div className="card pac-table" style={{ overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr style={{ background: C.surfaceHigh }}>
+              {["Paciente", "Kinesiólogo", "Fecha", "Tratamiento", "Estado", "Notas"].map(h =>
+                <th key={h} style={{ padding: "11px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: C.textMuted, letterSpacing: ".06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+              )}
+            </tr></thead>
+            <tbody>
+              {filtradas.map((s, i) => {
+                const colPac = kinColor(s.paciente?.kin_id);
+                const colKin = kinColor(s.kin_id);
+                return <tr key={s.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "12px 14px" }}>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
+                      onClick={() => s.paciente && setDetalle({ tipo: "paciente", data: s.paciente })}
+                      title="Ver historial del paciente"
+                    >
+                      <Avatar nombre={s.paciente?.nombre || "?"} size={30} color={colPac} />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: C.accent, textDecoration: "underline dotted" }}>{s.paciente?.nombre || "—"}</div>
+                        <div style={{ fontSize: 11, color: C.textMuted }}>DNI {s.paciente?.dni}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: "12px 14px" }}>
+                    {s.kinesiologo ? <div
+                      style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+                      onClick={() => setDetalle({ tipo: "kinesiologo", data: s.kinesiologo })}
+                      title="Ver historial del kinesiólogo"
+                    >
+                      <Avatar nombre={s.kinesiologo.nombre} size={26} color={colKin} />
+                      <span style={{ fontSize: 13, color: C.accent, textDecoration: "underline dotted" }}>{s.kinesiologo.nombre}</span>
+                    </div> : <span style={{ color: C.textMuted, fontSize: 13 }}>—</span>}
+                  </td>
+                  <td style={{ padding: "12px 14px", fontWeight: 700, color: C.accent, fontSize: 13, whiteSpace: "nowrap" }}>{fmtDate(s.fecha)}</td>
+                  <td style={{ padding: "12px 14px", fontSize: 13, color: C.textSoft, maxWidth: 160 }}>
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.paciente?.tratamiento || "—"}</div>
+                  </td>
+                  <td style={{ padding: "12px 14px" }}>
+                    <Badge label={s.realizada ? "Realizada" : "Pendiente"} type={s.realizada ? "activo" : "pendiente"} />
+                  </td>
+                  <td style={{ padding: "12px 14px", fontSize: 12, color: C.textMuted, maxWidth: 200 }}>
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.notas || <span style={{ fontStyle: "italic" }}>Sin notas</span>}
+                    </div>
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="pac-cards" style={{ display: "none", flexDirection: "column", gap: 10 }}>
+        {filtradas.map(s => {
+          const colPac = kinColor(s.paciente?.kin_id);
+          const colKin = kinColor(s.kin_id);
+          return <div key={s.id} className="card" style={{ padding: "14px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <Avatar nombre={s.paciente?.nombre || "?"} size={38} color={colPac} />
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{ fontWeight: 700, fontSize: 14, color: C.accent, cursor: "pointer" }}
+                  onClick={() => s.paciente && setDetalle({ tipo: "paciente", data: s.paciente })}
+                >{s.paciente?.nombre || "—"}</div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{s.paciente?.tratamiento}</div>
+              </div>
+              <Badge label={s.realizada ? "Realizada" : "Pendiente"} type={s.realizada ? "activo" : "pendiente"} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: s.notas ? 10 : 0 }}>
+              <div style={{ fontWeight: 700, color: C.accent, fontSize: 13, minWidth: 88 }}>{fmtDate(s.fecha)}</div>
+              {s.kinesiologo && <div
+                style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                onClick={() => setDetalle({ tipo: "kinesiologo", data: s.kinesiologo })}
+              >
+                <Avatar nombre={s.kinesiologo.nombre} size={22} color={colKin} />
+                <span style={{ fontSize: 12, color: C.accent }}>{s.kinesiologo.nombre}</span>
+              </div>}
+            </div>
+            {s.notas && <div style={{ fontSize: 12, color: C.textSoft, background: C.surfaceHigh, padding: "8px 10px", borderRadius: 8 }}>{s.notas}</div>}
+          </div>;
+        })}
+      </div>
+    </>}
+  </div>;
+}
+
 // ── SECRETARIA ─────────────────────────────────────────────────────────────
 function SecDashboard({ pacientes, kinesiologos, sesiones, turnos, solicitudes, mensajes, sesionesRealizadasMap, onEditarSesion }) {
   const hoy = today();
@@ -1190,13 +1397,14 @@ function Sidebar({ auth, view, setView, onLogout, isOpen, onClose, badgeSolicitu
   const isKin = auth.rol === "kinesiologo";
   const col = isKin ? kinColor(auth.kin_id) : isPac ? C.green : C.accent;
   const navSec = [
-    { id: "home", icon: "⚡", label: "Dashboard" },
-    { id: "pacientes", icon: "👥", label: "Pacientes" },
-    { id: "kinesiologos", icon: "🩺", label: "Kinesiólogos" },
-    { id: "turnos", icon: "📅", label: "Agenda" },
-    { id: "solicitudes", icon: "🔔", label: "Solicitudes", badge: badgeSolicitudes },
-    { id: "chat", icon: "💬", label: "Mensajes", badge: badgeMensajes },
-  ];
+  { id: "home", icon: "⚡", label: "Dashboard" },
+  { id: "pacientes", icon: "👥", label: "Pacientes" },
+  { id: "kinesiologos", icon: "🩺", label: "Kinesiólogos" },
+  { id: "turnos", icon: "📅", label: "Agenda" },
+  { id: "historial", icon: "📋", label: "Historial" },
+  { id: "solicitudes", icon: "🔔", label: "Solicitudes", badge: badgeSolicitudes },
+  { id: "chat", icon: "💬", label: "Mensajes", badge: badgeMensajes },
+];
   const navKin = [
     { id: "home", icon: "⚡", label: "Mi día" },
     { id: "fichas", icon: "📁", label: "Fichas" },
@@ -1399,6 +1607,7 @@ export default function App() {
           {auth.rol === "secretaria" && view === "turnos" && <SecTurnos turnos={turnos} pacientes={pacientes} kinesiologos={kinesiologos} onAgregar={agregarTurno} onEditar={editarTurno} onEliminar={eliminarTurno} />}
           {auth.rol === "secretaria" && view === "solicitudes" && <SecSolicitudes solicitudes={solicitudes} setSolicitudes={setSolicitudes} pacientes={pacientes} kinesiologos={kinesiologos} turnos={turnos} setTurnos={setTurnos} />}
           {auth.rol === "secretaria" && view === "chat" && <SecChat mensajes={mensajes} setMensajes={setMensajes} pacientes={pacientes} />}
+          {auth.rol === "secretaria" && view === "historial" && <SecHistorial sesiones={sesiones} pacientes={pacientes} kinesiologos={kinesiologos} />}
           {auth.rol === "kinesiologo" && kin && view === "home" && <KinHoy kin={kin} pacientes={pacientes} sesiones={sesiones} turnos={turnos} onNuevaSesion={() => setModalSesRapida(true)} />}
           {auth.rol === "kinesiologo" && kin && view === "fichas" && <KinFichas kin={kin} pacientes={pacientes} setPacientes={setPacientes} sesiones={sesiones} setSesiones={setSesiones} ejercicios={ejercicios} kinesiologos={kinesiologos} onAgregarPaciente={agregarPaciente} onEditarPaciente={editarPaciente} onCambiarEstado={cambiarEstadoPaciente} onAgregarSesion={agregarSesion} onAgregarEjercicio={agregarEjercicio} onEditarEjercicio={editarEjercicio} onEliminarEjercicio={eliminarEjercicio} />}
           {auth.rol === "paciente" && pacienteActual && view === "home" && <PacDashboard paciente={pacienteActual} kinesiologos={kinesiologos} sesiones={sesiones} ejercicios={ejercicios} solicitudes={solicitudes} />}
