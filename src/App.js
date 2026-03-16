@@ -790,7 +790,12 @@ export default function App() {
   const [ejercicios, setEjercicios] = useState([]);
   const [turnos, setTurnos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [auth, setAuth] = useState(null);
+  const [auth, setAuth] = useState(() => {
+  try {
+    const saved = localStorage.getItem("kinesioapp_auth");
+    return saved ? JSON.parse(saved) : null;
+  } catch { return null; }
+});
   const [view, setView] = useState("home");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modalSesRapida, setModalSesRapida] = useState(false);
@@ -875,13 +880,18 @@ export default function App() {
     await supabase.from("turnos").delete().eq("id", id);
     setTurnos(prev => prev.filter(t => t.id !== id));
   };
-  const logout = () => { setAuth(null); setView("home"); setSidebarOpen(false); };
+  const logout = () => {
+  localStorage.removeItem("kinesioapp_auth");
+  setAuth(null);
+  setView("home");
+  setSidebarOpen(false);
+};
 
   const kin = auth?.rol === "kinesiologo" ? kinesiologos.find(k => k.id === auth.kin_id) : null;
   const misPacientesKin = kin ? pacientes.filter(p => p.kin_id === kin.id && p.estado === "activo") : [];
 
   if (loading) return <><style>{CSS}</style><div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}><Spinner /></div></>;
-  if (!auth) return <><style>{CSS}</style><Login onLogin={u => { setAuth(u); setView("home"); }} /></>;
+  if (!auth) return <><style>{CSS}</style><Login onLogin={u => { localStorage.setItem("kinesioapp_auth", JSON.stringify(u)); setAuth(u); setView("home"); }} /></>;
 
   return <>
     <style>{CSS}</style>
