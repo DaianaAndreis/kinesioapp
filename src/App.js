@@ -66,7 +66,7 @@ label{font-size:12px;font-weight:600;color:${C.textSoft};letter-spacing:.04em;di
 
 function today() { return new Date().toISOString().split("T")[0]; }
 function fmtDate(d) { if (!d) return "—"; const [y, m, dd] = d.split("-"); return `${dd}/${m}/${y}`; }
-function getInitials(nombre) { return nombre?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "?"; }
+function getInitials(n) { return n?.split(" ").map(x => x[0]).join("").slice(0, 2).toUpperCase() || "?"; }
 const KIN_COLORS = ["#2563eb", "#7c3aed", "#059669", "#d97706", "#dc2626", "#0891b2"];
 function kinColor(id) { return KIN_COLORS[(id - 1) % KIN_COLORS.length] || C.accent; }
 
@@ -230,6 +230,23 @@ function FormSesion({ pacientes, onSave, onClose }) {
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
       <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
       <button className="btn btn-primary" disabled={!valid} onClick={() => valid && onSave(f)} style={{ opacity: valid ? 1 : .45 }}>Registrar sesión</button>
+    </div>
+  </>;
+}
+
+function FormEditSesion({ sesion, onSave, onClose }) {
+  const [f, setF] = useState({ fecha: sesion.fecha, notas: sesion.notas || "", realizada: sesion.realizada });
+  const set = k => e => setF(p => ({ ...p, [k]: e.target.value }));
+  return <>
+    <Field label="Fecha"><input type="date" value={f.fecha} onChange={set("fecha")} /></Field>
+    <Field label="Notas"><textarea value={f.notas} onChange={set("notas")} placeholder="Evolución, observaciones..." rows={4} style={{ resize: "vertical" }} /></Field>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: C.greenSoft, borderRadius: 10, border: `1px solid rgba(5,150,105,0.2)`, marginBottom: 20 }}>
+      <input type="checkbox" id="realizada-edit" checked={f.realizada} onChange={e => setF(p => ({ ...p, realizada: e.target.checked }))} style={{ width: 16, height: 16, accentColor: C.green }} />
+      <label htmlFor="realizada-edit" style={{ textTransform: "none", fontSize: 13.5, color: C.green, margin: 0, fontWeight: 600 }}>✓ Marcar como realizada</label>
+    </div>
+    <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+      <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+      <button className="btn btn-primary" onClick={() => onSave(f)}>Guardar cambios</button>
     </div>
   </>;
 }
@@ -487,7 +504,7 @@ function KinHoy({ kin, pacientes, sesiones, turnos, onNuevaSesion }) {
   </div>;
 }
 
-function KinFichas({ kin, pacientes, sesiones, ejercicios, kinesiologos, onAgregarPaciente, onEditarPaciente, onCambiarEstado, onAgregarSesion, onAgregarEjercicio, onEditarEjercicio, onEliminarEjercicio }) {
+function KinFichas({ kin, pacientes, setPacientes, sesiones, setSesiones, ejercicios, kinesiologos, onAgregarPaciente, onEditarPaciente, onCambiarEstado, onAgregarSesion, onAgregarEjercicio, onEditarEjercicio, onEliminarEjercicio }) {
   const col = kinColor(kin.id);
   const misPacientes = pacientes.filter(p => p.kin_id === kin.id);
   const [selId, setSelId] = useState(misPacientes[0]?.id || null);
@@ -497,11 +514,30 @@ function KinFichas({ kin, pacientes, sesiones, ejercicios, kinesiologos, onAgreg
   const [modalPac, setModalPac] = useState(false);
   const [editPac, setEditPac] = useState(false);
   const [editEj, setEditEj] = useState(null);
+  const [editandoSesion, setEditandoSesion] = useState(null);
   const [busqueda, setBusqueda] = useState("");
   const sel = pacientes.find(p => p.id === selId);
   const misSesiones = sesiones.filter(s => s.paciente_id === selId).sort((a, b) => b.fecha.localeCompare(a.fecha));
   const misEjercicios = ejercicios.filter(e => e.paciente_id === selId);
   const pacFiltrados = misPacientes.filter(p => p.nombre?.toLowerCase().includes(busqueda.toLowerCase()));
+
+  const guardarSesion = async f => {
+    const eraRealizada = editandoSesion.realizada;
+    const { data } = await supabase.from("sesiones").update({ fecha: f.fecha, notas: f.notas, realizada: f.realizada }).eq("id", editandoSesion.id).select().single();
+    if (data) {
+      setSesiones(prev => prev.map(s => s.id === editandoSesion.id ? data : s));
+      if (f.realizada && !eraRealizada) {
+        await supabase.from("pacientes").update({ sesiones: (sel?.sesiones || 0) + 1 }).eq("id", selId);
+        setPacientes(prev => prev.map(p => p.id === selId ? { ...p, sesiones: p.sesiones + 1 } : p));
+      }
+      if (!f.realizada && eraRealizada) {
+        await supabase.from("pacientes").update({ sesiones: Math.max((sel?.sesiones || 1) - 1, 0) }).eq("id", selId);
+        setPacientes(prev => prev.map(p => p.id === selId ? { ...p, sesiones: Math.max(p.sesiones - 1, 0) } : p));
+      }
+    }
+    setEditandoSesion(null);
+  };
+
   return <div className="fade" style={{ display: "flex", gap: 20 }}>
     <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", gap: 8 }}>
@@ -516,6 +552,7 @@ function KinFichas({ kin, pacientes, sesiones, ejercicios, kinesiologos, onAgreg
         </div>)}
       </div>
     </div>
+
     <div style={{ flex: 1, minWidth: 0 }}>
       {!sel ? <Empty msg="Seleccioná un paciente" icon="👤" /> : <>
         <div className="card" style={{ padding: "18px 22px", marginBottom: 16 }}>
@@ -534,9 +571,11 @@ function KinFichas({ kin, pacientes, sesiones, ejercicios, kinesiologos, onAgreg
             </div>
           </div>
         </div>
+
         <div style={{ display: "flex", gap: 4, marginBottom: 16, background: C.surfaceHigh, borderRadius: 10, padding: 4, width: "fit-content" }}>
           {["info", "sesiones", "ejercicios"].map(t => <button key={t} className={`tab-btn ${tab === t ? "active" : ""}`} onClick={() => setTab(t)} style={{ textTransform: "capitalize" }}>{t}</button>)}
         </div>
+
         {tab === "info" && <div className="fade card" style={{ padding: 24 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }} className="form-grid">
             {[["Tratamiento", sel.tratamiento], ["Teléfono", sel.tel || "—"], ["Obra social", sel.obra_social || "—"], ["Sesiones", sel.sesiones], ["Inicio", fmtDate(sel.fecha_inicio)], ["Estado", sel.estado]].map(([l, v]) =>
@@ -547,17 +586,22 @@ function KinFichas({ kin, pacientes, sesiones, ejercicios, kinesiologos, onAgreg
             </div>}
           </div>
         </div>}
+
         {tab === "sesiones" && <div className="fade">
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}><button className="btn btn-primary" onClick={() => setModalSes(true)}>+ Nueva sesión</button></div>
           {misSesiones.length === 0 ? <Empty msg="Sin sesiones" icon="📋" /> :
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {misSesiones.map(s => <div key={s.id} className="card" style={{ padding: "14px 18px", display: "flex", gap: 14 }}>
-                <div style={{ fontWeight: 700, color: col, fontSize: 13, minWidth: 88 }}>{fmtDate(s.fecha)}</div>
+              {misSesiones.map(s => <div key={s.id} className="card" style={{ padding: "14px 18px", display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <div style={{ fontWeight: 700, color: col, fontSize: 13, minWidth: 88, paddingTop: 2 }}>{fmtDate(s.fecha)}</div>
                 <div style={{ flex: 1, fontSize: 13, color: C.textSoft }}>{s.notas || <span style={{ color: C.textMuted, fontStyle: "italic" }}>Sin notas</span>}</div>
-                <Badge label={s.realizada ? "Realizada" : "Pendiente"} type={s.realizada ? "activo" : "pendiente"} />
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                  <Badge label={s.realizada ? "Realizada" : "Pendiente"} type={s.realizada ? "activo" : "pendiente"} />
+                  <button className="btn btn-ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => setEditandoSesion(s)}>✏️</button>
+                </div>
               </div>)}
             </div>}
         </div>}
+
         {tab === "ejercicios" && <div className="fade">
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}><button className="btn btn-primary" onClick={() => setModalEj(true)}>+ Agregar</button></div>
           {misEjercicios.length === 0 ? <Empty msg="Sin ejercicios" icon="💪" /> :
@@ -578,7 +622,9 @@ function KinFichas({ kin, pacientes, sesiones, ejercicios, kinesiologos, onAgreg
         </div>}
       </>}
     </div>
+
     {modalSes && <Modal title="Registrar sesión" onClose={() => setModalSes(false)} width={460}><FormSesion pacientes={sel ? [sel] : []} onSave={f => { onAgregarSesion({ ...f, paciente_id: selId }); setModalSes(false); }} onClose={() => setModalSes(false)} /></Modal>}
+    {editandoSesion && <Modal title="Editar sesión" onClose={() => setEditandoSesion(null)} width={460}><FormEditSesion sesion={editandoSesion} onSave={guardarSesion} onClose={() => setEditandoSesion(null)} /></Modal>}
     {modalEj && <Modal title="Nuevo ejercicio" onClose={() => setModalEj(false)} width={460}><FormEjercicio onSave={f => { onAgregarEjercicio({ ...f, paciente_id: selId }); setModalEj(false); }} onClose={() => setModalEj(false)} /></Modal>}
     {editEj && <Modal title="Editar ejercicio" onClose={() => setEditEj(null)} width={460}><FormEjercicio onSave={f => { onEditarEjercicio(editEj.id, f); setEditEj(null); }} onClose={() => setEditEj(null)} initial={editEj} /></Modal>}
     {modalPac && <Modal title="Agregar paciente" onClose={() => setModalPac(false)}><FormPaciente kinesiologos={kinesiologos} onSave={f => { onAgregarPaciente(f); setModalPac(false); }} onClose={() => setModalPac(false)} fixedKinId={kin.id} /></Modal>}
@@ -780,7 +826,7 @@ export default function App() {
           {auth.rol === "secretaria" && view === "kinesiologos" && <SecKinesiologos kinesiologos={kinesiologos} pacientes={pacientes} sesiones={sesiones} onAgregar={agregarKinesiologo} onEditar={editarKinesiologo} onEliminar={eliminarKinesiologo} />}
           {auth.rol === "secretaria" && view === "turnos" && <SecTurnos turnos={turnos} pacientes={pacientes} kinesiologos={kinesiologos} onAgregar={agregarTurno} onEditar={editarTurno} onEliminar={eliminarTurno} />}
           {auth.rol === "kinesiologo" && kin && view === "home" && <KinHoy kin={kin} pacientes={pacientes} sesiones={sesiones} turnos={turnos} onNuevaSesion={() => setModalSesRapida(true)} />}
-          {auth.rol === "kinesiologo" && kin && view === "fichas" && <KinFichas kin={kin} pacientes={pacientes} sesiones={sesiones} ejercicios={ejercicios} kinesiologos={kinesiologos} onAgregarPaciente={agregarPaciente} onEditarPaciente={editarPaciente} onCambiarEstado={cambiarEstadoPaciente} onAgregarSesion={agregarSesion} onAgregarEjercicio={agregarEjercicio} onEditarEjercicio={editarEjercicio} onEliminarEjercicio={eliminarEjercicio} />}
+          {auth.rol === "kinesiologo" && kin && view === "fichas" && <KinFichas kin={kin} pacientes={pacientes} setPacientes={setPacientes} sesiones={sesiones} setSesiones={setSesiones} ejercicios={ejercicios} kinesiologos={kinesiologos} onAgregarPaciente={agregarPaciente} onEditarPaciente={editarPaciente} onCambiarEstado={cambiarEstadoPaciente} onAgregarSesion={agregarSesion} onAgregarEjercicio={agregarEjercicio} onEditarEjercicio={editarEjercicio} onEliminarEjercicio={eliminarEjercicio} />}
         </div>
       </div>
     </div>
